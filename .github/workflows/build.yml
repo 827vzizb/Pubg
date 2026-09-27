@@ -1,6 +1,7 @@
 name: Build Kivy APK
 
 on:
+
   push:
     branches:
       - main
@@ -15,10 +16,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          # Fixed all missing packages and autoconf macro errors
+          # Required libraries for Ubuntu runners
           sudo apt install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool libltdl-dev pkg-config zlib1g-dev libncurses-dev cmake libffi-dev libssl-dev
           
-          pip3 install --user --upgrade buildozer cython virtualenv --break-system-packages
+          # CRITICAL FIX: Cython is pinned to 0.29.36 to prevent Kivy compilation failure
+          pip3 install --user --upgrade buildozer "cython==0.29.36" virtualenv --break-system-packages
 
       - name: Build APK with Buildozer
         run: |
@@ -30,3 +32,4 @@ jobs:
         with:
           name: game-apk
           path: bin/*.apk
+

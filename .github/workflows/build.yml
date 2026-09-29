@@ -6,55 +6,38 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-22.04
+  build-android:
+    name: Build for Android
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      # Docker image ke andar build hota hai - toolchain preinstalled & matched
+      - name: Build with Buildozer
+        id: buildozer
+        uses: ArtemSBulgakov/buildozer-action@v1
         with:
-          python-version: '3.10'
+          command: buildozer android debug
+          buildozer_version: master
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip openjdk-17-jdk \
-            autoconf automake libtool libtool-bin libltdl-dev \
-            pkg-config zlib1g-dev \
-            libncurses5-dev libncursesw5-dev libtinfo5 \
-            cmake libffi-dev libssl-dev \
-            build-essential ccache autopoint gettext
-
-      - name: Force Java 17
-        run: |
-          sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
-          sudo update-alternatives --set javac /usr/lib/jvm/java-17-openjdk-amd64/bin/javac
-          java -version
-
-      - name: Cache Android SDK/NDK
-        uses: actions/cache@v4
-        with:
-          path: ~/.buildozer
-          key: buildozer-global-${{ hashFiles('buildozer.spec') }}
-          restore-keys: buildozer-global-
-
-      - name: Install Buildozer
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install buildozer==1.5.0 cython==0.29.36 virtualenv
-          buildozer --version
-
-      - name: Build APK
-        run: buildozer -v android debug
-
+      # APK upload
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: pubg-launcher-apk
           path: bin/*.apk
           if-no-files-found: error
+
+      # FULL log upload - agar fail ho to humein asli error milega
+      - name: Upload full build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            .buildozer/android/platform/build-*/build.log
+            .buildozer/android/platform/build-*/dists/*/build.log
+          if-no-files-found: ignore
 

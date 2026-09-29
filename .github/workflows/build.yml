@@ -14,30 +14,66 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Docker image ke andar build hota hai - toolchain preinstalled & matched
-      - name: Build with Buildozer
-        id: buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        with:
-          command: buildozer android debug
-          buildozer_version: master
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
 
-      # APK upload
+      - name: Cache buildozer global dir
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-global-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-global-
+
+      - name: Pull official Buildozer image
+        run: docker pull kivy/buildozer:latest
+
+      # Asli build - official image ke andar
+      - name: Build APK
+        run: |
+          mkdir -p "$HOME/.buildozer"
+          set +e
+          docker run --rm \
+            --volume "$HOME/.buildozer":/home/user/.buildozer \
+            --volume "$PWD":/home/user/hostcwd \
+            kivy/buildozer:latest -v android debug 2>&1 | tee build_full.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "BUILD_EXIT_CODE=$EXIT_CODE" >> "$GITHUB_ENV"
+          exit $EXIT_CODE
+
+      - name: Fix file permissions
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" . || true
+
+      # Fail hone par asli error seedha log me dikhega (truncation se bacha)
+      - name: Show real error
+        if: failure()
+        run: |
+          echo "========== ERROR LINES =========="
+          grep -n -i -E "error|traceback|exception|cannot find|no such file|undefined reference|command .* failed" build_full.log | tail -n 60 || true
+          echo "========== LAST 100 LINES =========="
+          tail -n 100 build_full.log || true
+
+      - name: Listing bin
+        if: always()
+        run: ls -la bin/ || echo "bin/ folder nahi bana"
+
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: pubg-launcher-apk
           path: bin/*.apk
           if-no-files-found: error
 
-      # FULL log upload - agar fail ho to humein asli error milega
       - name: Upload full build log
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: |
-            .buildozer/android/platform/build-*/build.log
-            .buildozer/android/platform/build-*/dists/*/build.log
+          path: build_full.log
           if-no-files-found: ignore
 
